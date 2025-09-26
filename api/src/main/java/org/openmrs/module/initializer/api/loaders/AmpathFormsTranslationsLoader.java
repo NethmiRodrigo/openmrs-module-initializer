@@ -41,6 +41,42 @@ public class AmpathFormsTranslationsLoader extends BaseFileLoader {
 		return "json";
 	}
 	
+	private Form getForm(Map<String, Object> jsonTranslationsDefinition) {
+		Form form;
+		String formName = (String) jsonTranslationsDefinition.get("form");
+		if (formName == null) {
+			throw new IllegalArgumentException("'form' property is required for AMPATH forms translations loader.");
+		}
+		form = formService.getForm(formName);
+		if (form == null) {
+			throw new IllegalArgumentException(
+			        "Could not find a form named '" + formName + "'. Please ensure an existing form is configured.");
+		}
+		return form;
+	}
+	
+	@Override
+	protected void preload(File file) throws Exception {
+		String jsonTranslationsString = FileUtils.readFileToString(file, StandardCharsets.UTF_8.toString());
+		Map<String, Object> jsonTranslationsDefinition = new ObjectMapper().readValue(jsonTranslationsString, Map.class);
+		
+		Form form;
+		form = getForm(jsonTranslationsDefinition);
+		
+		String language = (String) jsonTranslationsDefinition.get("language");
+		if (StringUtils.isBlank(language)) {
+			throw new IllegalArgumentException("'language' property is required for AMPATH forms translations loader.");
+		}
+		
+		String formNameTranslation = (String) jsonTranslationsDefinition.get("form_name_translation");
+		if (!StringUtils.isBlank(formNameTranslation)) {
+			msgSource.addPresentation(new PresentationMessage("ui.i18n.Form.name." + form.getUuid(),
+					LocaleUtils.toLocale(language), formNameTranslation, null));
+			msgSource.addPresentation(new PresentationMessage("org.openmrs.Form." + form.getUuid(),
+					LocaleUtils.toLocale(language), formNameTranslation, null));
+		}
+	}
+	
 	@Override
 	protected void load(File file) throws Exception {
 		String jsonTranslationsString = FileUtils.readFileToString(file, StandardCharsets.UTF_8.toString());
@@ -51,24 +87,14 @@ public class AmpathFormsTranslationsLoader extends BaseFileLoader {
 			throw new IllegalArgumentException("'language' property is required for AMPATH forms translations loader.");
 		}
 		
-		Form form = null;
-		
-		String formName = (String) jsonTranslationsDefinition.get("form");
-		if (formName == null) {
-			throw new IllegalArgumentException("'form' property is required for AMPATH forms translations loader.");
-		}
-		form = formService.getForm(formName);
-		if (form == null) {
-			throw new IllegalArgumentException(
-			        "Could not find a form named '" + formName + "'. Please ensure an existing form is configured.");
-		}
+		Form form = getForm(jsonTranslationsDefinition);
 		
 		FormResource formResource = null;
 		for (FormResource fr : formService.getFormResourcesForForm(form)) {
 			if (LONG_FREE_TEXT_DATATYPE.equals(fr.getDatatypeClassname())) {
 				Map<String, Object> jsonMap = new ObjectMapper().readValue(fr.getValue().toString(), Map.class);
 				if (jsonMap.containsKey("translations") && StringUtils.equals(jsonMap.get("language").toString(),
-				    jsonTranslationsDefinition.get("language").toString())) {
+						jsonTranslationsDefinition.get("language").toString())) {
 					formResource = fr;
 					break;
 				}
@@ -85,12 +111,6 @@ public class AmpathFormsTranslationsLoader extends BaseFileLoader {
 		formResource.setValue(jsonTranslationsString);
 		formService.saveFormResource(formResource);
 		
-		String formNameTranslation = (String) jsonTranslationsDefinition.get("form_name_translation");
-		if (!StringUtils.isBlank(formNameTranslation)) {
-			msgSource.addPresentation(new PresentationMessage("ui.i18n.Form.name." + form.getUuid(),
-			        LocaleUtils.toLocale(language), formNameTranslation, null));
-			msgSource.addPresentation(new PresentationMessage("org.openmrs.Form." + form.getUuid(),
-			        LocaleUtils.toLocale(language), formNameTranslation, null));
-		}
+		
 	}
 }
